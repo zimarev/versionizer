@@ -1,4 +1,4 @@
-package com.github.zimarev.versionizer.configuration;
+package com.github.zimarev.versionizer.dto;
 
 import lombok.Data;
 
