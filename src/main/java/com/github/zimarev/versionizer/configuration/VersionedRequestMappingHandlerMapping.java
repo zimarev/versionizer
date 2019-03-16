@@ -1,8 +1,8 @@
 package com.github.zimarev.versionizer.configuration;
 
 import com.github.zimarev.versionizer.annotation.VersionedApi;
-import com.github.zimarev.versionizer.dto.VersionedApiConfigHolder;
 import com.github.zimarev.versionizer.dto.VersionedMappingDataHolder;
+import com.github.zimarev.versionizer.strategy.VersionizerStrategy;
 import org.springframework.lang.Nullable;
 import org.springframework.util.StringValueResolver;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -24,9 +24,18 @@ public class VersionedRequestMappingHandlerMapping extends RequestMappingHandler
     private static final ThreadLocal<Boolean> versioning = InheritableThreadLocal.withInitial(() -> true);
     private static final Map<RequestMappingInfo, Set<VersionedMappingDataHolder>> versionedMappingsMap = new WeakHashMap<>();
 
+    private final VersionizerConfiguration configuration;
+    private final VersionizerStrategy strategy;
+
     @Nullable
     private StringValueResolver embeddedValueResolver;
 
+    public VersionedRequestMappingHandlerMapping(final VersionizerConfiguration configuration) {
+        this.configuration = configuration;
+        this.strategy = configuration.getStrategy();
+    }
+
+    @Override
     protected void initHandlerMethods() {
         for (String beanName : getCandidateBeanNames()) {
             if (!beanName.startsWith(SCOPED_TARGET_NAME_PREFIX)) {
@@ -46,17 +55,9 @@ public class VersionedRequestMappingHandlerMapping extends RequestMappingHandler
         }
 
         versionedMappingsMap.forEach((mapping, infoSet) -> {
-            final VersionedMappingDataHolder best = decideBestMapping(infoSet);
+            final VersionedMappingDataHolder best = strategy.decideBestMapping(infoSet);
             registerHandlerMethod(best.getHandlerType(), best.getMethod(), mapping);
         });
-    }
-
-    // todo: move to strategy
-    // find highest version for now
-    protected VersionedMappingDataHolder decideBestMapping(final Set<VersionedMappingDataHolder> infoSet) {
-        return infoSet.stream().sorted(Comparator.comparing(VersionedMappingDataHolder::getVersion).reversed())
-                .filter(holder -> holder.getVersion() > 0) // todo: move to validation phase
-                .findFirst().orElse(null);
     }
 
     @Override
@@ -71,11 +72,11 @@ public class VersionedRequestMappingHandlerMapping extends RequestMappingHandler
     protected RequestMappingInfo getCommonRequestMappingInfo(final Class<?> handlerType, RequestMappingInfo info) {
         final RequestMappingInfo typeInfo = createRequestMappingInfo(handlerType);
         if (typeInfo != null) {
-            info = typeInfo.combine(info);
+            info = strategy.combineVersionizedMapping(info, typeInfo);
         }
         final String prefix = getPathPrefix(handlerType);
         if (prefix != null) {
-            info = RequestMappingInfo.paths(prefix).build().combine(info);
+            info = strategy.combineVersionizedMapping(info, RequestMappingInfo.paths(prefix).build());
         }
         return info;
     }
@@ -101,9 +102,9 @@ public class VersionedRequestMappingHandlerMapping extends RequestMappingHandler
         RequestMappingInfo info = createRequestMappingInfo(method);
         if (info != null) {
             info = getCommonRequestMappingInfo(handlerType, info);
-            final RequestMappingInfo versionedMapping = getVersionedMapping(method, handlerType);
+            final RequestMappingInfo versionedMapping = strategy.getVersionedMapping(method, handlerType);
             if (versionedMapping != null) {
-                info = versionedMapping.combine(info);
+                info = strategy.combineVersionizedMapping(info, versionedMapping);
             }
         }
         return info;
@@ -117,31 +118,10 @@ public class VersionedRequestMappingHandlerMapping extends RequestMappingHandler
     }
 
     protected double getVersion(final VersionedApi handler, final VersionedApi method) {
-        return notNull(1.0, // todo: move to config bean
+        return notNull(configuration.getDefaultVersion(),
                 ofNullable(method).map(VersionedApi::version).orElse(null),
                 ofNullable(handler).map(VersionedApi::version).orElse(null)
         );
-    }
-
-    // todo: move to strategy
-    protected RequestMappingInfo getVersionedMapping(final Method method, final Class<?> handlerType) {
-        final VersionedApiConfigHolder configuration = getMergedConfiguration(
-                findMergedAnnotation(handlerType, VersionedApi.class),
-                findMergedAnnotation(method, VersionedApi.class)
-        );
-        return buildMappingInfo(configuration);
-    }
-
-    protected RequestMappingInfo buildMappingInfo(final VersionedApiConfigHolder config) {
-        return RequestMappingInfo
-                .paths(config.getPathVersion())
-                .build();
-    }
-
-    protected VersionedApiConfigHolder getMergedConfiguration(final VersionedApi cl, final VersionedApi mth) {
-        final VersionedApiConfigHolder config = new VersionedApiConfigHolder();
-        config.setVersion(getVersion(mth, cl));
-        return config;
     }
 
     protected String getPathPrefix(Class<?> handlerType) {
@@ -158,10 +138,10 @@ public class VersionedRequestMappingHandlerMapping extends RequestMappingHandler
     }
 
     protected RequestMappingInfo createRequestMappingInfo(AnnotatedElement element) {
-        RequestMapping requestMapping = findMergedAnnotation(element, RequestMapping.class);
-        RequestCondition<?> condition = (element instanceof Class ?
+        final RequestMapping requestMapping = findMergedAnnotation(element, RequestMapping.class);
+        final RequestCondition<?> condition = (element instanceof Class ?
                 getCustomTypeCondition((Class<?>) element) : getCustomMethodCondition((Method) element));
-        return (requestMapping != null ? createRequestMappingInfo(requestMapping, condition) : null);
+        return requestMapping != null ? createRequestMappingInfo(requestMapping, condition) : null;
     }
 
     @Override
