@@ -16,6 +16,7 @@ public class VersionedApiConfiguration extends WebMvcConfigurationSupport {
         return new VersionedRequestMappingHandlerMapping(versionizerConfiguration());
     }
 
+    // fixme: extract somewhere
     @Bean
     @ConditionalOnMissingBean(VersionizerConfiguration.class)
     public VersionizerConfiguration versionizerConfiguration() {

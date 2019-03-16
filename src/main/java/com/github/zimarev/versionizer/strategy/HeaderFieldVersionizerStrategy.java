@@ -12,10 +12,18 @@ import java.util.Set;
 
 import static org.springframework.core.annotation.AnnotatedElementUtils.findMergedAnnotation;
 
-public class PathPrependingVersionizerStrategy extends AbstractConfigurableVersionizerStrategy {
+public class HeaderFieldVersionizerStrategy extends AbstractConfigurableVersionizerStrategy {
+    private static final String DEFAULT_HEADER_NAME = "X-API-VERSION";
 
-    public PathPrependingVersionizerStrategy(final VersionizerConfiguration configuration) {
+    private final String HEADER_NAME;
+
+    public HeaderFieldVersionizerStrategy(VersionizerConfiguration configuration) {
+        this(configuration, DEFAULT_HEADER_NAME);
+    }
+
+    public HeaderFieldVersionizerStrategy(VersionizerConfiguration configuration, String headerName) {
         super(configuration);
+        this.HEADER_NAME = headerName;
     }
 
     @Override
@@ -32,7 +40,8 @@ public class PathPrependingVersionizerStrategy extends AbstractConfigurableVersi
                 findMergedAnnotation(method, VersionedApi.class)
         );
         return RequestMappingInfo
-                .paths(configuration.getPathVersion())
+                .paths()
+                .headers(HEADER_NAME + "=" + configuration.getVersion())
                 .build();
     }
 }

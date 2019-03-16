@@ -56,8 +56,12 @@ public class VersionedRequestMappingHandlerMapping extends RequestMappingHandler
 
         versionedMappingsMap.forEach((mapping, infoSet) -> {
             final VersionedMappingDataHolder best = strategy.decideBestMapping(infoSet);
-            registerHandlerMethod(best.getHandlerType(), best.getMethod(), mapping);
+            registerHandlerMethod(getBeanName(best.getHandlerType()), best.getMethod(), mapping);
         });
+    }
+
+    protected String getBeanName(final Class<?> clazz) {
+        return obtainApplicationContext().getBeanNamesForType(clazz)[0];
     }
 
     @Override
