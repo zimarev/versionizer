@@ -15,4 +15,8 @@ public interface VersionizerStrategy {
     VersionedMappingDataHolder decideBestMapping(Set<VersionedMappingDataHolder> infoSet);
 
     RequestMappingInfo getVersionedMapping(Method method, Class<?> handlerType);
+
+    double getDefaultVersion();
+
+    void setDefaultVersion(double defaultVersion);
 }
